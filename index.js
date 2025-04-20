@@ -34,7 +34,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     await client.connect();
-    console.log('✅ Connected to MongoDB');
+    console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
     const db = client.db('homecareSolutions');
     const servicesCollection = db.collection('services');
@@ -47,22 +47,36 @@ async function run() {
 
     // Get all services
     app.get('/services', async (req, res) => {
-      try {
-        const services = await servicesCollection.find().toArray();
-        res.send(services);
-      } catch {
-        res.status(500).send({ message: 'Error fetching services' });
-      }
+      const { email } = req.query;
+      const query = email ? { provider_email: email } : {};
+      const services = await servicesCollection.find(query).toArray();
+    
+      const servicesWithCounts = await Promise.all(
+        services.map(async (service) => {
+          const count = await bookingsCollection.countDocuments({
+            service_id: service._id.toString(),
+          });
+          return { ...service, bookingCount: count };
+        })
+      );
+    
+      res.json(servicesWithCounts);
     });
+    
 
     // Get a single service by ID
     app.get('/services/:id', async (req, res) => {
       const { id } = req.params;
-      if (!ObjectId.isValid(id)) return res.status(400).send({ message: 'Invalid ID' });
+      if (!ObjectId.isValid(id))
+        return res.status(400).send({ message: 'Invalid ID' });
 
       try {
-        const service = await servicesCollection.findOne({ _id: new ObjectId(id) });
-        service ? res.send(service) : res.status(404).send({ message: 'Service not found' });
+        const service = await servicesCollection.findOne({
+          _id: new ObjectId(id),
+        });
+        service
+          ? res.send(service)
+          : res.status(404).send({ message: 'Service not found' });
       } catch {
         res.status(500).send({ message: 'Error fetching service' });
       }
@@ -87,7 +101,9 @@ async function run() {
       if (!email) return res.status(400).send({ message: 'Email is required' });
 
       try {
-        const services = await servicesCollection.find({ provider_email: email }).toArray();
+        const services = await servicesCollection
+          .find({ provider_email: email })
+          .toArray();
         res.send(services);
       } catch {
         res.status(500).send({ message: 'Error fetching user services' });
@@ -99,7 +115,8 @@ async function run() {
       const { id } = req.params;
       const updatedData = req.body;
 
-      if (!ObjectId.isValid(id)) return res.status(400).send({ message: 'Invalid service ID' });
+      if (!ObjectId.isValid(id))
+        return res.status(400).send({ message: 'Invalid service ID' });
 
       try {
         const result = await servicesCollection.updateOne(
@@ -117,10 +134,13 @@ async function run() {
     // Delete a service
     app.delete('/services/:id', async (req, res) => {
       const { id } = req.params;
-      if (!ObjectId.isValid(id)) return res.status(400).send({ message: 'Invalid service ID' });
+      if (!ObjectId.isValid(id))
+        return res.status(400).send({ message: 'Invalid service ID' });
 
       try {
-        const result = await servicesCollection.deleteOne({ _id: new ObjectId(id) });
+        const result = await servicesCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
         result.deletedCount > 0
           ? res.send({ message: 'Service deleted successfully' })
           : res.status(404).send({ message: 'Service not found' });
@@ -148,7 +168,9 @@ async function run() {
       if (!email) return res.status(400).send({ message: 'Email is required' });
 
       try {
-        const bookings = await bookingsCollection.find({ user_email: email }).toArray();
+        const bookings = await bookingsCollection
+          .find({ user_email: email })
+          .toArray();
         res.send(bookings);
       } catch {
         res.status(500).send({ message: 'Error fetching bookings' });
@@ -158,10 +180,13 @@ async function run() {
     // Get bookings by service ID
     app.get('/bookings-by-service', async (req, res) => {
       const { serviceId } = req.query;
-      if (!serviceId) return res.status(400).send({ message: 'Service ID is required' });
+      if (!serviceId)
+        return res.status(400).send({ message: 'Service ID is required' });
 
       try {
-        const bookings = await bookingsCollection.find({ service_id: serviceId }).toArray();
+        const bookings = await bookingsCollection
+          .find({ service_id: serviceId })
+          .toArray();
         res.send(bookings);
       } catch {
         res.status(500).send({ message: 'Error fetching service bookings' });
@@ -174,7 +199,9 @@ async function run() {
       if (!email) return res.status(400).send({ message: 'Email is required' });
 
       try {
-        const bookings = await bookingsCollection.find({ user_email: email }).toArray();
+        const bookings = await bookingsCollection
+          .find({ user_email: email })
+          .toArray();
 
         const enrichedBookings = await Promise.all(
           bookings.map(async (booking) => {
@@ -184,20 +211,22 @@ async function run() {
               });
 
               return service
-                ? {
-                    ...booking,
-                    name: service.service_name,
-                    location: service.service_area,
-                    image: service.service_image,
-                    company: service?.service_provider?.name || 'Unknown',
-                  }
-                : {
-                    ...booking,
-                    name: 'Service not found',
-                    location: 'N/A',
-                    image: 'https://placehold.co/150',
-                    company: 'Unknown',
-                  };
+              ? {
+                  ...booking,
+                  name: service.service_name,
+                  location: service.service_area,
+                  image: service.service_image,
+                  company: service?.service_provider?.name || 'Unknown',
+                  price: service.price || booking.price, 
+                }
+              : {
+                  ...booking,
+                  name: 'Service not found',
+                  location: 'N/A',
+                  image: 'https://placehold.co/150',
+                  company: 'Unknown',
+                  price: booking.price || 'N/A', 
+                };            
             } catch {
               return booking;
             }
@@ -214,12 +243,18 @@ async function run() {
     app.patch('/bookings/:id', async (req, res) => {
       const { id } = req.params;
       const { status } = req.body;
-      const validStatuses = ['Pending', 'In Progress', 'Completed', 'Cancelled'];
+      const validStatuses = [
+        'Pending',
+        'In Progress',
+        'Completed',
+        'Cancelled',
+      ];
 
       if (!validStatuses.includes(status))
         return res.status(400).send({ message: 'Invalid status value' });
 
-      if (!ObjectId.isValid(id)) return res.status(400).send({ message: 'Invalid booking ID' });
+      if (!ObjectId.isValid(id))
+        return res.status(400).send({ message: 'Invalid booking ID' });
 
       try {
         const result = await bookingsCollection.updateOne(
@@ -241,7 +276,9 @@ async function run() {
         return res.status(400).send({ message: 'Invalid booking ID' });
 
       try {
-        const result = await bookingsCollection.deleteOne({ _id: new ObjectId(id) });
+        const result = await bookingsCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
         result.deletedCount > 0
           ? res.send({ message: 'Booking deleted successfully' })
           : res.status(404).send({ message: 'Booking not found' });
@@ -250,13 +287,13 @@ async function run() {
       }
     });
   } catch (error) {
-    console.error('❌ Error connecting to MongoDB:', error);
+    console.error('Error connecting to MongoDB:', error);
   }
 }
 
 // Start server
 run().then(() => {
   app.listen(port, () => {
-    console.log(`🚀 Server running on http://localhost:${port}`);
+    console.log(`Service is waiting at: ${port}`);
   });
 });
