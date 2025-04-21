@@ -8,17 +8,7 @@ const port = process.env.PORT || 5000;
 
 // Middleware
 const allowedOrigins = ['http://localhost:5173'];
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin)) {
-        return callback(null, true);
-      }
-      return callback(new Error('CORS not allowed'));
-    },
-    credentials: true,
-  })
-);
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json());
 
 // MongoDB Connection
@@ -34,7 +24,7 @@ const client = new MongoClient(uri, {
 async function run() {
   try {
     await client.connect();
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    console.log('Connected to MongoDB!');
 
     const db = client.db('homecareSolutions');
     const servicesCollection = db.collection('services');
@@ -45,12 +35,12 @@ async function run() {
       res.send('Homecare Solutions Server is Running!');
     });
 
-    // Get all services
+    // 🔹 Get all services (with count)
     app.get('/services', async (req, res) => {
       const { email } = req.query;
       const query = email ? { provider_email: email } : {};
       const services = await servicesCollection.find(query).toArray();
-    
+
       const servicesWithCounts = await Promise.all(
         services.map(async (service) => {
           const count = await bookingsCollection.countDocuments({
@@ -59,58 +49,45 @@ async function run() {
           return { ...service, bookingCount: count };
         })
       );
-    
+
       res.json(servicesWithCounts);
     });
-    
 
-    // Get a single service by ID
+    // 🔹 Get single service by ID
     app.get('/services/:id', async (req, res) => {
       const { id } = req.params;
       if (!ObjectId.isValid(id))
         return res.status(400).send({ message: 'Invalid ID' });
 
-      try {
-        const service = await servicesCollection.findOne({
-          _id: new ObjectId(id),
-        });
-        service
-          ? res.send(service)
-          : res.status(404).send({ message: 'Service not found' });
-      } catch {
-        res.status(500).send({ message: 'Error fetching service' });
-      }
+      const service = await servicesCollection.findOne({
+        _id: new ObjectId(id),
+      });
+      service
+        ? res.send(service)
+        : res.status(404).send({ message: 'Service not found' });
     });
 
-    // Create a new service
+    // 🔹 Create a new service
     app.post('/services', async (req, res) => {
-      try {
-        const newService = req.body;
-        const result = await servicesCollection.insertOne(newService);
-        result.insertedId
-          ? res.status(201).json({ serviceId: result.insertedId })
-          : res.status(400).json({ error: 'Service creation failed' });
-      } catch {
-        res.status(500).json({ error: 'Internal Server Error' });
-      }
+      const newService = req.body;
+      const result = await servicesCollection.insertOne(newService);
+      result.insertedId
+        ? res.status(201).json({ serviceId: result.insertedId })
+        : res.status(400).json({ error: 'Service creation failed' });
     });
 
-    // Get services by provider email
+    // 🔹 Get user-created services by provider email
     app.get('/user-services', async (req, res) => {
       const { email } = req.query;
       if (!email) return res.status(400).send({ message: 'Email is required' });
 
-      try {
-        const services = await servicesCollection
-          .find({ provider_email: email })
-          .toArray();
-        res.send(services);
-      } catch {
-        res.status(500).send({ message: 'Error fetching user services' });
-      }
+      const services = await servicesCollection
+        .find({ provider_email: email })
+        .toArray();
+      res.send(services);
     });
 
-    // Update a service
+    // 🔹 Update a service
     app.patch('/services/:id', async (req, res) => {
       const { id } = req.params;
       const updatedData = req.body;
@@ -118,182 +95,152 @@ async function run() {
       if (!ObjectId.isValid(id))
         return res.status(400).send({ message: 'Invalid service ID' });
 
-      try {
-        const result = await servicesCollection.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: updatedData }
-        );
-        result.modifiedCount > 0
-          ? res.send({ message: 'Service updated successfully' })
-          : res.status(404).send({ message: 'Service not found' });
-      } catch {
-        res.status(500).send({ message: 'Error updating service' });
-      }
+      const result = await servicesCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: updatedData }
+      );
+
+      result.modifiedCount > 0
+        ? res.send({ message: 'Service updated successfully' })
+        : res.status(404).send({ message: 'Service not found' });
     });
 
-    // Delete a service
+    // 🔹 Delete a service
     app.delete('/services/:id', async (req, res) => {
       const { id } = req.params;
       if (!ObjectId.isValid(id))
         return res.status(400).send({ message: 'Invalid service ID' });
 
-      try {
-        const result = await servicesCollection.deleteOne({
-          _id: new ObjectId(id),
-        });
-        result.deletedCount > 0
-          ? res.send({ message: 'Service deleted successfully' })
-          : res.status(404).send({ message: 'Service not found' });
-      } catch {
-        res.status(500).send({ message: 'Error deleting service' });
-      }
+      const result = await servicesCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+
+      result.deletedCount > 0
+        ? res.send({ message: 'Service deleted successfully' })
+        : res.status(404).send({ message: 'Service not found' });
     });
 
-    // Book a service
+    // 🔹 Book a service
     app.post('/bookings', async (req, res) => {
       const bookingData = req.body;
-      bookingData.status = 'Pending';
 
-      try {
-        const result = await bookingsCollection.insertOne(bookingData);
-        res.send(result);
-      } catch {
-        res.status(500).send({ message: 'Error creating booking' });
-      }
+      bookingData.status = 'Pending';
+      bookingData.createdAt = new Date().toISOString();
+      bookingData.updatedAt = new Date().toISOString();
+      bookingData.service_id = bookingData.service_id.toString(); // 👈 Ensure it's string
+      bookingData.user_email = bookingData.user_email.toString();
+
+      const result = await bookingsCollection.insertOne(bookingData);
+      res.send(result);
     });
 
-    // Get bookings by user email
+    // 🔹 Get bookings by user email
     app.get('/bookings', async (req, res) => {
       const { email } = req.query;
       if (!email) return res.status(400).send({ message: 'Email is required' });
 
-      try {
-        const bookings = await bookingsCollection
-          .find({ user_email: email })
-          .toArray();
-        res.send(bookings);
-      } catch {
-        res.status(500).send({ message: 'Error fetching bookings' });
-      }
+      const bookings = await bookingsCollection
+        .find({ user_email: email })
+        .toArray();
+      res.send(bookings);
     });
 
-    // Get bookings by service ID
-    app.get('/bookings-by-service', async (req, res) => {
-      const { serviceId } = req.query;
-      if (!serviceId)
-        return res.status(400).send({ message: 'Service ID is required' });
+    // 🔹 Get bookings for a service by service_id
+    app.get('/service-bookings/services/:service_id', async (req, res) => {
+      const { service_id } = req.params;
 
       try {
         const bookings = await bookingsCollection
-          .find({ service_id: serviceId })
+          .find({ service_id })
           .toArray();
-        res.send(bookings);
-      } catch {
-        res.status(500).send({ message: 'Error fetching service bookings' });
+
+        if (bookings.length > 0) {
+          res.json(bookings); // Send bookings data as the response
+        } else {
+          res
+            .status(404)
+            .json({ message: 'No bookings found for this service' });
+        }
+      } catch (error) {
+        console.error('Error fetching bookings:', error);
+        res.status(500).json({ message: 'Failed to fetch bookings' });
       }
     });
 
-    // Get enriched bookings by user email
+    // 🔹 Get enriched bookings (for MyBookedServices)
     app.get('/enriched-bookings', async (req, res) => {
       const { email } = req.query;
       if (!email) return res.status(400).send({ message: 'Email is required' });
 
-      try {
-        const bookings = await bookingsCollection
-          .find({ user_email: email })
-          .toArray();
+      const bookings = await bookingsCollection
+        .find({ user_email: email })
+        .toArray();
 
-        const enrichedBookings = await Promise.all(
-          bookings.map(async (booking) => {
-            try {
-              const service = await servicesCollection.findOne({
-                _id: new ObjectId(booking.service_id),
-              });
+      const enriched = await Promise.all(
+        bookings.map(async (booking) => {
+          const service = await servicesCollection.findOne({
+            _id: new ObjectId(booking.service_id),
+          });
 
-              return service
-              ? {
-                  ...booking,
-                  name: service.service_name,
-                  location: service.service_area,
-                  image: service.service_image,
-                  company: service?.service_provider?.name || 'Unknown',
-                  price: service.price || booking.price, 
-                }
-              : {
-                  ...booking,
-                  name: 'Service not found',
-                  location: 'N/A',
-                  image: 'https://placehold.co/150',
-                  company: 'Unknown',
-                  price: booking.price || 'N/A', 
-                };            
-            } catch {
-              return booking;
-            }
-          })
-        );
+          return {
+            ...booking,
+            name: service?.service_name || 'Unknown Service',
+            location: service?.service_area || 'N/A',
+            image: service?.service_image || 'https://placehold.co/150',
+            company: service?.service_provider?.name || 'Unknown',
+            price: service?.price || booking?.price || 'N/A',
+            status: booking.status || 'Pending',
+          };
+        })
+      );
 
-        res.send(enrichedBookings);
-      } catch {
-        res.status(500).send({ message: 'Error enriching service bookings' });
-      }
+      res.send(enriched);
     });
 
-    // Update booking status
+    // 🔹 Update booking status
     app.patch('/bookings/:id', async (req, res) => {
       const { id } = req.params;
       const { status } = req.body;
-      const validStatuses = [
-        'Pending',
-        'In Progress',
-        'Completed',
-        'Cancelled',
-      ];
-
-      if (!validStatuses.includes(status))
-        return res.status(400).send({ message: 'Invalid status value' });
 
       if (!ObjectId.isValid(id))
         return res.status(400).send({ message: 'Invalid booking ID' });
 
-      try {
-        const result = await bookingsCollection.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: { status } }
-        );
-        result.modifiedCount > 0
-          ? res.send({ message: 'Booking status updated' })
-          : res.status(404).send({ message: 'Booking not found' });
-      } catch {
-        res.status(500).send({ message: 'Error updating booking status' });
-      }
+      const result = await bookingsCollection.findOneAndUpdate(
+        { _id: new ObjectId(id) },
+        { $set: { status, updatedAt: new Date().toISOString() } },
+        { returnDocument: 'after' }
+      );
+
+      result?.value
+        ? res.send({
+            message: 'Booking status updated',
+            updatedBooking: result.value,
+          })
+        : res.status(404).send({ message: 'Booking not found' });
     });
 
-    // Delete booking
+    // 🔹 Delete booking
     app.delete('/bookings/:id', async (req, res) => {
       const { id } = req.params;
       if (!ObjectId.isValid(id))
         return res.status(400).send({ message: 'Invalid booking ID' });
 
-      try {
-        const result = await bookingsCollection.deleteOne({
-          _id: new ObjectId(id),
-        });
-        result.deletedCount > 0
-          ? res.send({ message: 'Booking deleted successfully' })
-          : res.status(404).send({ message: 'Booking not found' });
-      } catch {
-        res.status(500).send({ message: 'Error deleting booking' });
-      }
+      const result = await bookingsCollection.deleteOne({
+        _id: new ObjectId(id),
+      });
+
+      result.deletedCount > 0
+        ? res.send({ message: 'Booking deleted successfully' })
+        : res.status(404).send({ message: 'Booking not found' });
     });
   } catch (error) {
-    console.error('Error connecting to MongoDB:', error);
+    console.error('MongoDB connection failed:', error);
   }
 }
 
 // Start server
 run().then(() => {
   app.listen(port, () => {
-    console.log(`Service is waiting at: ${port}`);
+    console.log(`Service is running on port: ${port}`);
   });
 });
