@@ -35,7 +35,7 @@ async function run() {
       res.send('Homecare Solutions Server is Running!');
     });
 
-    // 🔹 Get all services (with count)
+    //  Get all services (with count)
     app.get('/services', async (req, res) => {
       const { email } = req.query;
       const query = email ? { provider_email: email } : {};
@@ -53,7 +53,7 @@ async function run() {
       res.json(servicesWithCounts);
     });
 
-    // 🔹 Get single service by ID
+    //  Get single service by ID
     app.get('/services/:id', async (req, res) => {
       const { id } = req.params;
       if (!ObjectId.isValid(id))
@@ -67,7 +67,7 @@ async function run() {
         : res.status(404).send({ message: 'Service not found' });
     });
 
-    // 🔹 Create a new service
+    //  Create a new service
     app.post('/services', async (req, res) => {
       const newService = req.body;
       const result = await servicesCollection.insertOne(newService);
@@ -76,7 +76,7 @@ async function run() {
         : res.status(400).json({ error: 'Service creation failed' });
     });
 
-    // 🔹 Get user-created services by provider email
+    //  Get user-created services by provider email
     app.get('/user-services', async (req, res) => {
       const { email } = req.query;
       if (!email) return res.status(400).send({ message: 'Email is required' });
@@ -87,7 +87,7 @@ async function run() {
       res.send(services);
     });
 
-    // 🔹 Update a service
+    //  Update a service
     app.patch('/services/:id', async (req, res) => {
       const { id } = req.params;
       const updatedData = req.body;
@@ -105,7 +105,7 @@ async function run() {
         : res.status(404).send({ message: 'Service not found' });
     });
 
-    // 🔹 Delete a service
+    //  Delete a service
     app.delete('/services/:id', async (req, res) => {
       const { id } = req.params;
       if (!ObjectId.isValid(id))
@@ -120,21 +120,21 @@ async function run() {
         : res.status(404).send({ message: 'Service not found' });
     });
 
-    // 🔹 Book a service
+    //  Book a service
     app.post('/bookings', async (req, res) => {
       const bookingData = req.body;
 
       bookingData.status = 'Pending';
       bookingData.createdAt = new Date().toISOString();
       bookingData.updatedAt = new Date().toISOString();
-      bookingData.service_id = bookingData.service_id.toString(); // 👈 Ensure it's string
+      bookingData.service_id = bookingData.service_id.toString(); 
       bookingData.user_email = bookingData.user_email.toString();
 
       const result = await bookingsCollection.insertOne(bookingData);
       res.send(result);
     });
 
-    // 🔹 Get bookings by user email
+    //  Get bookings by user email
     app.get('/bookings', async (req, res) => {
       const { email } = req.query;
       if (!email) return res.status(400).send({ message: 'Email is required' });
@@ -145,7 +145,7 @@ async function run() {
       res.send(bookings);
     });
 
-    // 🔹 Get bookings for a service by service_id
+    //  Get bookings for a service by service_id
     app.get('/service-bookings/services/:service_id', async (req, res) => {
       const { service_id } = req.params;
 
@@ -167,7 +167,7 @@ async function run() {
       }
     });
 
-    // 🔹 Get enriched bookings (for MyBookedServices)
+    //  Get enriched bookings (for MyBookedServices)
     app.get('/enriched-bookings', async (req, res) => {
       const { email } = req.query;
       if (!email) return res.status(400).send({ message: 'Email is required' });
@@ -197,7 +197,7 @@ async function run() {
       res.send(enriched);
     });
 
-    // 🔹 Update booking status
+    //  Update booking status
     app.patch('/bookings/:id', async (req, res) => {
       const { id } = req.params;
       const { status } = req.body;
@@ -219,7 +219,7 @@ async function run() {
         : res.status(404).send({ message: 'Booking not found' });
     });
 
-    // 🔹 Delete booking
+    //  Delete booking
     app.delete('/bookings/:id', async (req, res) => {
       const { id } = req.params;
       if (!ObjectId.isValid(id))
